@@ -1,0 +1,11 @@
+# What the app is built from. Exact versions, so every build is the same.
+faster-whisper==1.2.1
+ctranslate2==4.8.3
+av==19.0.2
+numpy==2.2.6
+pillow==11.3.0
+uharfbuzz==0.56.3
+freetype-py==2.5.1
+imageio-ffmpeg==0.6.0
+certifi==2025.8.3
+pywebview==6.2.1

@@ -1,0 +1,9 @@
+dist/
+work/
+out/
+build/__pycache__/
+__pycache__/
+*.pyc
+.DS_Store
+selftest*.txt
+*.dmg

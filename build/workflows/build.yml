@@ -1,0 +1,141 @@
+# Builds the Mac and Windows apps, checks they really work, and puts them on
+# the Releases page (which the download page links to).
+# Runs every time publish.command sends a new version (a "v..." tag).
+name: Build the app
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  mac:
+    name: Mac
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install what the app is made from
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller==6.22.3 2>&1 | tee pip.log
+      - name: Check it works before packing
+        env:
+          QVM_SELFTEST_LOG: ${{ github.workspace }}/selftest-source.txt
+        run: |
+          code=0; python main.py --selftest || code=$?
+          python build/report.py selftest-source.txt "Mac self-test (source)"
+          exit $code
+      - name: Pack it into a Mac app
+        run: pyinstaller --noconfirm --distpath dist --workpath work build/app.spec 2>&1 | tee build.log
+      - name: Sign it (free, ad-hoc) so macOS opens it after a download
+        run: |
+          codesign --force --deep --sign - "dist/Quran Video Maker.app"
+          codesign --verify --deep --strict --verbose=2 "dist/Quran Video Maker.app"
+      - name: Check the packed app works
+        env:
+          QVM_SELFTEST_LOG: ${{ github.workspace }}/selftest-app.txt
+        run: |
+          code=0; "dist/Quran Video Maker.app/Contents/MacOS/Quran Video Maker" --selftest || code=$?
+          python build/report.py selftest-app.txt "Mac self-test (app)"
+          exit $code
+      - name: Make the download (.dmg)
+        run: |
+          mkdir -p dmg out
+          cp -R "dist/Quran Video Maker.app" dmg/
+          ln -s /Applications dmg/Applications
+          for i in 1 2 3 4 5; do
+            hdiutil create -volname "Quran Video Maker" -srcfolder dmg -ov -format UDZO out/QuranVideoMaker-Mac.dmg && break
+            sleep 10
+          done
+          ls -la out
+      - name: Show what went wrong
+        if: failure()
+        run: |
+          [ -f build.log ] && python build/report.py build.log "Mac build log" error || true
+          [ -f pip.log ] && python build/report.py pip.log "Mac install log" error || true
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mac
+          path: out/QuranVideoMaker-Mac.dmg
+
+  windows:
+    name: Windows
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install what the app is made from
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller==6.22.3 2>&1 | tee pip.log
+      - name: Check it works before packing
+        shell: bash
+        env:
+          QVM_SELFTEST_LOG: ${{ github.workspace }}\selftest-source.txt
+        run: |
+          code=0; python main.py --selftest || code=$?
+          python build/report.py selftest-source.txt "Windows self-test (source)"
+          exit $code
+      - name: Pack it into a Windows program
+        shell: bash
+        run: pyinstaller --noconfirm --distpath dist --workpath work build/app.spec 2>&1 | tee build.log
+      - name: Check the packed program works
+        shell: pwsh
+        env:
+          QVM_SELFTEST_LOG: ${{ github.workspace }}\selftest-app.txt
+        run: |
+          $p = Start-Process -FilePath "dist\Quran Video Maker\Quran Video Maker.exe" -ArgumentList "--selftest" -Wait -PassThru
+          python build/report.py selftest-app.txt "Windows self-test (app)"
+          exit $p.ExitCode
+      - name: Make the installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress; }
+          & $iscc build\installer.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Get-ChildItem out
+      - name: Show what went wrong
+        if: failure()
+        shell: bash
+        run: |
+          [ -f build.log ] && python build/report.py build.log "Windows build log" error || true
+          [ -f pip.log ] && python build/report.py pip.log "Windows install log" error || true
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows
+          path: out/QuranVideoMaker-Windows-Setup.exe
+
+  release:
+    name: Publish the downloads
+    needs: [mac, windows]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: out
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v3
+        with:
+          name: Quran Video Maker ${{ github.ref_name }}
+          make_latest: "true"
+          files: |
+            out/QuranVideoMaker-Mac.dmg
+            out/QuranVideoMaker-Windows-Setup.exe
+          body: |
+            **Quran Video Maker** — by [@zizorecites](https://www.tiktok.com/@zizorecites)
+
+            - **Mac** (Apple chip, macOS 14 or newer): download `QuranVideoMaker-Mac.dmg`, open it, drag the app into Applications.
+            - **Windows** (10 or 11): download `QuranVideoMaker-Windows-Setup.exe` and run it.
+
+            The first time you open it, it downloads the listener (about 480 MB). After that everything runs on your computer.
