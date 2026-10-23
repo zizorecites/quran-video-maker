@@ -134,13 +134,18 @@
   }
 
   // ------------------------------------------------------------- make videos
+  const folderName = (p) => String(p || "").split(/[\\/]/).filter(Boolean).pop() || p;
   function bgChip() {
     const s = S.settings;
     return `<div style="display:flex;align-items:center;gap:10px">
       <div class="thumb" style="width:52px;height:30px;${s.bg_url ? `background-image:url(${s.bg_url})` : "border:1px dashed #445"}"></div>
       <div style="line-height:1.25"><div class="faint" style="font-size:12px">Background for MP3s</div>
       <div style="font-size:13px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.bg_name ? esc(s.bg_name) : "<span class='muted'>none yet</span>"}</div></div>
-      <button class="btn small" data-act="bg">${s.bg_name ? "Change" : "Choose…"}</button></div>`;
+      <button class="btn small" data-act="bg">${s.bg_name ? "Change" : "Choose…"}</button></div>
+      <div style="display:flex;align-items:center;gap:10px;margin-left:18px;min-width:0">
+      <div style="line-height:1.25;min-width:0"><div class="faint" style="font-size:12px">Save videos to</div>
+      <div style="font-size:13px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(s.out_dir)}">${esc(folderName(s.out_dir))}</div></div>
+      <button class="btn small" data-act="out">Change</button></div>`;
   }
 
   function opt(it, key, label, sub, swatch, disabled) {
@@ -224,6 +229,7 @@
     $$("[data-act=files]", m).forEach((b) => b.onclick = () => attempt(() => api("choose_files")).then(refresh));
     $$("[data-act=folder]", m).forEach((b) => b.onclick = () => attempt(() => api("choose_folder")).then(refresh));
     $$("[data-act=bg]", m).forEach((b) => b.onclick = () => attempt(() => api("choose_background")).then(app.refresh));
+    $$("[data-act=out]", m).forEach((b) => b.onclick = () => attempt(() => api("choose_output")).then(app.refresh));
     $$("[data-act=clear]", m).forEach((b) => b.onclick = () => api("clear_items").then(app.refresh));
     $$("[data-act=remove]", m).forEach((b) => b.onclick = () => api("remove_item", { item_id: b.dataset.id }).then(app.refresh));
     $$("[data-act=pick]", m).forEach((b) => b.onclick = () => pickAyahs(S.items.find((i) => i.id === b.dataset.id)));
@@ -380,7 +386,8 @@
         return `<div class="card proj"><div class="top">${th || '<div class="thumb" style="width:96px;height:54px"></div>'}
           <div style="min-width:0"><div style="font-weight:650">${esc(p.name)}</div><div class="muted" style="font-size:12.5px">${esc(p.label)} · ${p.screens} screens${p.repeats ? ` · ${p.repeats} repeat${p.repeats > 1 ? "s" : ""}` : ""}</div></div>
           <div style="margin-left:auto;display:flex;gap:8px;align-items:center">${st}
-          ${first ? `<button class="btn small" data-act="play" data-p="${esc(first)}">▶ Play</button>` : ""}
+          ${[["bg", "Background"], ["own", "Your video"], ["black", "Black"]].filter(([k]) => p.outputs[k]).map(([k, label]) =>
+            `<button class="btn small" data-act="play" data-p="${esc(p.outputs[k])}" title="Play the ${label.toLowerCase()} one">▶ ${label}</button>`).join("")}
           <button class="btn small" data-act="edit" data-id="${esc(p.id)}">Edit screens</button>
           ${first ? `<button class="btn small ghost" data-act="reveal" data-p="${esc(first)}">${revealWord()}</button>` : ""}</div></div>${ds}</div>`;
       }).join("")}</div></div>`;
@@ -596,7 +603,8 @@
   function renderSettings(m) {
     const s = S.settings;
     const slider = (key, min, max, step, fmt) => `<div class="slider"><input type="range" data-k="${key}" min="${min}" max="${max}" step="${step}" value="${s[key]}"><span data-v="${key}">${fmt(s[key])}</span></div>`;
-    const fm = { arabic_size: (v) => v, english_size: (v) => v, fade: (v) => (+v).toFixed(2) + "s", bg_blur: (v) => v };
+    const where = (v) => (v < 0.44 ? "higher" : v > 0.5 ? "lower" : "middle");
+    const fm = { arabic_size: (v) => v, english_size: (v) => v, fade: (v) => (+v).toFixed(2) + "s", bg_blur: (v) => v, text_position: where };
     m.innerHTML = `<div class="head"><div><h1>Settings</h1><p>Saved on this computer, used for every video until you change them.</p></div></div>
       <div class="content"><div class="settings"><div>
         <div class="card" style="padding:18px 20px;margin-bottom:16px">
@@ -617,18 +625,19 @@
         </div>
         <div class="faint" style="font-size:12px;margin-top:16px">Quran Video Maker ${esc(S.version)} · made by <a href="#" data-act="tt" style="color:var(--accent)">@zizorecites</a> — check it out on TikTok</div>
       </div><div>
-        <div class="faint" style="font-size:12px;margin-bottom:8px">Text size — live preview</div>
+        <div class="faint" style="font-size:12px;margin-bottom:8px">Live preview</div>
         <div class="slidebox" id="pv" style="aspect-ratio:16/9"></div>
         <div style="margin-top:14px;display:flex;flex-direction:column;gap:12px">
           <div style="display:flex;justify-content:space-between;align-items:center"><span class="muted">Arabic size</span>${slider("arabic_size", 70, 170, 1, fm.arabic_size)}</div>
           <div style="display:flex;justify-content:space-between;align-items:center"><span class="muted">English size</span>${slider("english_size", 30, 90, 1, fm.english_size)}</div>
+          <div style="display:flex;justify-content:space-between;align-items:center"><span class="muted">Text position<br><span class="faint" style="font-size:11.5px">up or down the screen</span></span>${slider("text_position", 0.2, 0.8, 0.01, fm.text_position)}</div>
           <div style="display:flex;justify-content:space-between;align-items:center"><span class="muted">Fade between screens</span>${slider("fade", 0, 1, 0.05, fm.fade)}</div>
           <div style="display:flex;justify-content:space-between;align-items:center"><span class="muted">Video size</span><span class="chip">1920 × 1080 · 30 fps</span></div>
           <div class="faint" style="font-size:12px">Videos you add (MP4) keep their own shape.</div>
           <button class="btn small ghost" data-act="reset" style="align-self:flex-start;padding:0">Reset text to how it started</button>
         </div></div></div></div>`;
     const pv = $("#pv", m);
-    const look = () => ({ arabic_size: +$("[data-k=arabic_size]", m).value, english_size: +$("[data-k=english_size]", m).value, fade: +$("[data-k=fade]", m).value });
+    const look = () => ({ arabic_size: +$("[data-k=arabic_size]", m).value, english_size: +$("[data-k=english_size]", m).value, fade: +$("[data-k=fade]", m).value, text_position: +$("[data-k=text_position]", m).value });
     const updatePreview = () => { clearTimeout(previewTimer); previewTimer = setTimeout(() => api("style_preview", { look: look() }).then((src) => (pv.style.backgroundImage = `url(${src})`)), 120); };
     updatePreview();
     $$("input[type=range]", m).forEach((r) => {
@@ -640,7 +649,7 @@
     const nb = $("[data-act=nobg]", m);
     if (nb) nb.onclick = () => api("remove_background").then(async () => { await refresh(); renderSettings(m); });
     $("[data-act=out]", m).onclick = () => attempt(() => api("choose_output")).then(async () => { await refresh(); renderSettings(m); });
-    $("[data-act=reset]", m).onclick = () => api("settings_set", { changes: { arabic_size: 118, english_size: 56, fade: 0.25 } }).then(async () => { await refresh(); renderSettings(m); });
+    $("[data-act=reset]", m).onclick = () => api("settings_set", { changes: { arabic_size: 118, english_size: 56, fade: 0.25, text_position: 0.47 } }).then(async () => { await refresh(); renderSettings(m); });
     $("[data-act=tt]", m).onclick = (e) => { e.preventDefault(); api("open_tiktok"); };
   }
 

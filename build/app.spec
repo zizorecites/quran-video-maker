@@ -61,8 +61,8 @@ if sys.platform == "darwin":
         bundle_identifier="com.zizorecites.quranvideomaker",
         info_plist={
             "CFBundleDisplayName": NAME,
-            "CFBundleShortVersionString": "1.0.0",
-            "CFBundleVersion": "1.0.0",
+            "CFBundleShortVersionString": "1.0.1",
+            "CFBundleVersion": "1.0.1",
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "14.0",
             "NSHumanReadableCopyright": "by @zizorecites",

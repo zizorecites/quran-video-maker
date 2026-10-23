@@ -100,6 +100,7 @@ DEFAULTS = {
     "arabic_size": 118,
     "english_size": 56,
     "fade": 0.25,
+    "text_position": 0.47,    # where the middle of the text sits: 0 = top, 1 = bottom
 }
 
 
@@ -138,6 +139,7 @@ def apply_look(s=None):
     q.ARABIC_SIZE = int(s["arabic_size"])
     q.ENGLISH_SIZE = int(s["english_size"])
     q.FADE = float(s["fade"])
+    q.BLOCK_CENTER = float(s.get("text_position", 0.47))
 
 
 def set_background(src):
@@ -299,30 +301,41 @@ def item_by_id(item_id):
 
 
 def outputs_for(it, s=None):
-    """Every video this recording can make: kind -> file path."""
+    """
+    Every video this recording can make: kind -> file path.
+
+    Hud1-5.mp4     with your background (or your own video)
+    Hud1-5(1).mp4  black background
+    """
     s = s or settings()
     out = Path(s["out_dir"])
     stem = Path(it["path"]).stem
-    res = {"black": out / f"{stem}_guess.mp4"}
-    if it["kind"] == "video":
-        own = out / f"{stem}.mp4"
-        if own.resolve() == Path(it["path"]).resolve():
-            own = out / f"{stem} (with text).mp4"
-        res["own"] = own
-    else:
-        res["bg"] = out / f"{stem}.mp4"
+    src = Path(it["path"]).resolve()
+    main = out / f"{stem}.mp4"
+    n = 2
+    while main.resolve() == src:            # never write over the recording itself
+        main = out / f"{stem}({n}).mp4"
+        n += 1
+    res = {"black": out / f"{stem}(1).mp4"}
+    res["own" if it["kind"] == "video" else "bg"] = main
     return res
 
 
-def already_made(path, s=None):
-    s = s or settings()
+def already_made(path, s=None, kind=None):
+    """Is this video there - in the videos folder, or moved into Published?
+    Black videos made before were called Name_guess.mp4, so those count too."""
     path = Path(path)
-    return path.exists() or (path.parent / "Published" / path.name).exists()
+    names = [path.name]
+    if kind == "black" and path.name.endswith("(1).mp4"):
+        names.append(path.name[:-len("(1).mp4")] + "_guess.mp4")
+    return any((path.parent / n).exists() or (path.parent / "Published" / n).exists()
+               for n in names)
 
 
 def refresh_done(it):
     outs = outputs_for(it)
-    it["made"] = {} if it.get("remake") else {k: already_made(p) for k, p in outs.items()}
+    it["made"] = {} if it.get("remake") else {
+        k: already_made(p, kind=k) for k, p in outs.items()}
 
 
 def wanted(it):
@@ -792,7 +805,7 @@ def _make(it):
     outs = outputs_for(it, s)
     kinds = [k for k in wanted(it) if k in outs]
     if s.get("skip_done") and not it.get("remake"):
-        kinds = [k for k in kinds if not already_made(outs[k])]
+        kinds = [k for k in kinds if not already_made(outs[k], kind=k)]
     if not kinds:
         RUN["results"].append({"id": it["id"], "skipped": True})
         return None
@@ -809,7 +822,7 @@ def _make(it):
              "own": "Making the video with your recording"}
     d = it.get("duration") or q.audio_length(src)
     RUN["steps"] = [
-        {"label": "Found your breaths", "state": "todo", "cost": 1},
+        {"label": "Split it where you breathe", "state": "todo", "cost": 1},
         {"label": "Listened, one breath at a time", "state": "todo",
          "cost": 0 if reuse else _estimate(it) - len(kinds) * RATE["render"] * d},
         {"label": "Matched it to the mushaf", "state": "todo", "cost": 0.5},
@@ -836,7 +849,7 @@ def _make(it):
         db = q.loudness(src)
         begin, finish = q.speech_bounds(db, total)
         breaths = q.strong_breaths(db, begin, finish)
-        _step(0, "done", f"{len(breaths)} breaths")
+        _step(0, "done", f"{len(breaths) + 1} parts")
         _step(1, "now", None, 0.0)
         _check()
         info = {}

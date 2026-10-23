@@ -539,7 +539,8 @@ def render_slide(arab, eng, size=None):
      ar_step, en_step, total) = lay_out(draw, arab, eng, (W, H))
 
     y = H * BLOCK_CENTER - total / 2
-    y = max(H * (1 - MAX_BLOCK_HEIGHT) / 2, y)
+    margin = H * (1 - MAX_BLOCK_HEIGHT) / 2          # keep the text on the screen
+    y = max(margin, min(y, H - margin - total))
 
     if arabic_text.AVAILABLE:
         renderer = arabic_text.ArabicFont.get(ARABIC_FONT)

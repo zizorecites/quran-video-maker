@@ -1,7 +1,7 @@
 ; The Windows installer. GitHub builds this after making the program.
 #define AppName "Quran Video Maker"
 #ifndef AppVersion
-  #define AppVersion "1.0.0"
+  #define AppVersion "1.0.1"
 #endif
 
 [Setup]

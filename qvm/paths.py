@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 APP_NAME = "Quran Video Maker"
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 TIKTOK = "https://www.tiktok.com/@zizorecites"
 
 if getattr(sys, "frozen", False):                 # inside the built app
